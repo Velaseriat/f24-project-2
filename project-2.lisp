@@ -115,30 +115,43 @@ If LIST already contains ELEMENT, LIST is returned unchanged"
              (if truth
                  e
                  `(not ,e)))
-           (visit (e truth)
-             (if (var-p e)
+            (visit (e truth)
+              (cond
+               ((var-p e) (base e truth))
+               ((const-p e) (base e truth))
+               ((and (consp e)
                  (base e truth)
                  (destructuring-bind (op &rest args) e
                    (case op
                      (:implies
                       (destructuring-bind (a b) args
-                        (TODO 'exp->nnf-implies)))
+                        (if truth
+                          (visit `(or (not ,a) ,b) t)
+                          (visit `(and ,a (not ,b)) t))))
                      (:xor
                       (destructuring-bind (a b) args
-                        (TODO 'exp->nnf-xor)))
+                        (if truth
+                          (visit `(or (and ,a (not ,b)) (and (not ,a) ,b)) t)
+                          (visit `(and (or ,a ,b) (or (not ,a) (not ,b))) t))))
                      (:iff
                       (destructuring-bind (a b) args
-                        (TODO 'exp->nnf-iff)))
+                        (if truth
+                          (visit `(and (or (not ,a) ,b) (or ,a (not ,b))) t)
+                          (visit `(or (and ,a (not ,b)) (and (not ,a) ,b)) t))))
                      (not
                       (assert (and args (null (cdr args))))
                       (visit (car args) (not truth)))
                      (and
-                      (TODO 'exp->nnf-and))
+                      (if truth
+                        `(and ,@(mapcar (lambda (x) (visit x t)) args))
+                        `(or ,@(mapcar (lambda (x) (visit x nil)) args))))
                      (or
-                      (TODO 'exp->nnf-or))
+                      (if truth
+                        `(or ,@(mapcar (lambda (x) (visit x t)) args))
+                        `(and ,@(mapcar (lambda (x) (visit x nil)) args))))
                      (otherwise
-                      (base e truth)))))))
-
+                      (error "Invalid operator: ~A" op))))))
+            (t (error "Invalid expression: ~A" e)))))
     (visit e t)))
 
 
@@ -251,8 +264,13 @@ That is: T"
 (defun %dist-or-and-1 (literals and-exp)
   (assert (every #'lit-p literals))
   (assert (cnf-p and-exp))
-  `(or ,@literals ,and-exp)
-  (TODO '%dist-or-and-1))
+  (let ((clauses (cdr and-exp)))
+    (format t "Distributing OR over AND: Literals=~A, Clauses=~A~%" literals clauses)
+    `(and ,@(mapcar (lambda (clause)
+                      (let ((result (flatten-or `(or ,@literals ,clause))))
+                        (format t "Flattening: ~A => ~A~%" `(or ,@literals ,clause) result)
+                        result))
+                    clauses))))
 
 ;; Distribute OR over two AND expressions:
 ;;
@@ -263,8 +281,29 @@ That is: T"
 (defun %dist-or-and-and (and-exp-1 and-exp-2)
   (assert (cnf-p and-exp-1))
   (assert (cnf-p and-exp-2))
-  `(or ,and-exp-1 ,and-exp-2)
-  (TODO '%dist-or-and-and))
+  (let ((clauses-1 (cdr and-exp-1))
+        (clauses-2 (cdr and-exp-2)))
+    `(and ,@(mapcan (lambda (clause-1)
+                      (mapcar (lambda (clause-2)
+                                `(or ,@(if (and (listp clause-1) (eq (car clause-1) 'or))
+                                           (cdr clause-1)
+                                           (list clause-1))
+                                     ,@(if (and (listp clause-2) (eq (car clause-2) 'or))
+                                           (cdr clause-2)
+                                           (list clause-2))))
+                              clauses-2))
+                    clauses-1))))
+
+(defun flatten-or (expr)
+  "Flatten nested OR expressions."
+  (format t "Flattening OR expression: ~A~%" expr)
+  (if (and (listp expr) (eq (car expr) 'or))
+      `(or ,@(mapcan (lambda (x)
+                       (if (and (listp x) (eq (car x) 'or))
+                           (cdr x) ; Flatten nested OR
+                           (list x))) ; Keep literals or other expressions
+                     (cdr expr)))
+      expr))
 
 ;; Distribute n-ary OR over the AND arguments:
 ;;
