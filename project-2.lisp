@@ -295,13 +295,12 @@ That is: T"
                     clauses-1))))
 
 (defun flatten-or (expr)
-  "Flatten nested OR expressions."
   (format t "Flattening OR expression: ~A~%" expr)
   (if (and (listp expr) (eq (car expr) 'or))
       `(or ,@(mapcan (lambda (x)
                        (if (and (listp x) (eq (car x) 'or))
-                           (cdr x) ; Flatten nested OR
-                           (list x))) ; Keep literals or other expressions
+                           (cdr x)
+                           (list x)))
                      (cdr expr)))
       expr))
 
@@ -439,7 +438,15 @@ Returns: (VALUES maxterms (LIST bindings-literals...))"
   (assert (every #'maxterm-p maxterms))
   (assert (every #'lit-p bindings))
   ;; HINT: use DPLL-BIND
-  (TODO 'dpll-unit-propagate))
+  (labels ((process-units (remaining-terms new-bindings)
+             (let ((unit-clause (find-if #'maxterm-unit-p remaining-terms)))
+               (if unit-clause
+                   (let ((literal (cadr unit-clause)))
+                     (multiple-value-bind (updated-terms updated-bindings)
+                         (dpll-bind remaining-terms literal new-bindings)
+                       (process-units updated-terms updated-bindings)))
+                 (values remaining-terms new-bindings)))))
+    (process-units maxterms bindings)))
 
 
 (defun dpll-choose-literal (maxterms)
@@ -472,7 +479,18 @@ Returns: (VALUES (OR T NIL) (LIST bindings-literals...))"
       ((some #'maxterm-false-p maxterms) ; Base case: some maxterm is false
        (values nil bindings))
       (t ; Recursive case
-       (TODO 'dpll)))))
+       (let ((literal (dpll-choose-literal maxterms)))
+         (format t "Branching on literal: ~A~%" literal)
+         ;; Try assigning the literal to true
+         (multiple-value-bind (new-maxterms new-bindings)
+             (dpll-bind maxterms literal bindings)
+           (multiple-value-bind (result true-bindings)
+               (dpll new-maxterms new-bindings)
+             (if result
+                 (values t true-bindings)
+                 (multiple-value-bind (false-maxterms false-bindings)
+                     (dpll-bind maxterms (not-exp literal) bindings)
+                   (dpll false-maxterms false-bindings))))))))))
 
 (defun sat-p (e)
   "Check satisfiability of e."
