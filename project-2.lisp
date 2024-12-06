@@ -137,7 +137,7 @@ If LIST already contains ELEMENT, LIST is returned unchanged"
                       (destructuring-bind (a b) args
                         (if truth
                           (visit `(and (or (not ,a) ,b) (or ,a (not ,b))) t)
-                          (visit `(or (and ,a (not ,b)) (and (not ,a) ,b)) t))))
+                          (visit `(or (and ,a (not ,b)) (and ,b (not ,a))) t))))
                      (not
                       (assert (and args (null (cdr args))))
                       (visit (car args) (not truth)))
