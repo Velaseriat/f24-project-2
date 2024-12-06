@@ -125,19 +125,13 @@ If LIST already contains ELEMENT, LIST is returned unchanged"
                    (case op
                      (:implies
                       (destructuring-bind (a b) args
-                        (if truth
-                          (visit `(or (not ,a) ,b) t)
-                          (visit `(and ,a (not ,b)) t))))
+                        (visit `(or (not ,a) ,b) truth)))
                      (:xor
                       (destructuring-bind (a b) args
-                        (if truth
-                          (visit `(or (and ,a (not ,b)) (and (not ,a) ,b)) t)
-                          (visit `(and (or ,a ,b) (or (not ,a) (not ,b))) t))))
+                        (visit `(or (and ,a (not ,b)) (and (not ,a) ,b)) truth)))
                      (:iff
                       (destructuring-bind (a b) args
-                        (if truth
-                          (visit `(and (or (not ,a) ,b) (or ,a (not ,b))) t)
-                          (visit `(or (and ,a (not ,b)) (and ,b (not ,a))) t))))
+                        (visit `(and (:implies ,a ,b) (:implies ,b ,a)) truth)))
                      (not
                       (assert (and args (null (cdr args))))
                       (visit (car args) (not truth)))
